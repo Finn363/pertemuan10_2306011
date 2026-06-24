@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:pertemuan10_2306011/models/product_model.dart';
+import '../models/product_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'product_detail_page.dart'; // tambahkan import detail page
+import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'product_detail_page.dart';
 
 class ProductPage extends StatefulWidget {
   const ProductPage({super.key});
@@ -12,6 +15,8 @@ class ProductPage extends StatefulWidget {
 
 class _ProductPageState extends State<ProductPage> {
   List<ProductModel> products = [];
+  XFile? selectedImage;
+  final ImagePicker picker = ImagePicker();
 
   @override
   void initState() {
@@ -23,7 +28,9 @@ class _ProductPageState extends State<ProductPage> {
     final prefs = await SharedPreferences.getInstance();
     List<String> productList = prefs.getStringList('products') ?? [];
     setState(() {
-      products = productList.map((item) => ProductModel.fromJson(item)).toList();
+      products = productList
+          .map((item) => ProductModel.fromJson(item))
+          .toList();
     });
   }
 
@@ -31,6 +38,11 @@ class _ProductPageState extends State<ProductPage> {
     final prefs = await SharedPreferences.getInstance();
     List<String> productList = products.map((item) => item.toJson()).toList();
     await prefs.setStringList('products', productList);
+  }
+
+  Future<String> convertImageToBase64(XFile image) async {
+    Uint8List bytes = await image.readAsBytes();
+    return base64Encode(bytes);
   }
 
   Future<void> addProduct(ProductModel product) async {
@@ -48,9 +60,9 @@ class _ProductPageState extends State<ProductPage> {
       products[index] = product;
     });
     await saveProducts();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Produk berhasil diperbarui")),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text("Produk berhasil diperbarui")));
   }
 
   Future<void> deleteProduct(int index) async {
@@ -58,59 +70,120 @@ class _ProductPageState extends State<ProductPage> {
       products.removeAt(index);
     });
     await saveProducts();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Produk berhasil dihapus")),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text("Produk berhasil dihapus")));
+  }
+
+  Future<void> pickImage(StateSetter setDialogState) async {
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setDialogState(() {
+        selectedImage = image;
+      });
+    }
+  }
+
+  Widget buildPreviewImage(ProductModel? product) {
+    if (selectedImage != null) {
+      return FutureBuilder<Uint8List>(
+        future: selectedImage!.readAsBytes(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const CircularProgressIndicator();
+          }
+          return Image.memory(
+            snapshot.data!,
+            width: 150,
+            height: 150,
+            fit: BoxFit.cover,
+          );
+        },
+      );
+    }
+    if (product?.image.isNotEmpty ?? false) {
+      return Image.memory(
+        base64Decode(product!.image),
+        width: 150,
+        height: 150,
+        fit: BoxFit.cover,
+      );
+    }
+    return const Icon(Icons.image, size: 120);
   }
 
   void showForm({ProductModel? product, int? index}) {
-    TextEditingController nameController =
-        TextEditingController(text: product?.name ?? "");
-    TextEditingController descriptionController =
-        TextEditingController(text: product?.description ?? "");
-    TextEditingController priceController =
-        TextEditingController(text: product?.price.toString() ?? "");
+    TextEditingController nameController = TextEditingController(
+      text: product?.name ?? "",
+    );
+    TextEditingController descController = TextEditingController(
+      text: product?.desc ?? "",
+    );
+    TextEditingController priceController = TextEditingController(
+      text: product?.price.toString() ?? "",
+    );
+
+    selectedImage = null;
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(product == null ? "Tambah Produk" : "Edit Produk"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: "Nama"),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text(product == null ? "Tambah Produk" : "Edit Produk"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: "Nama"),
+                  ),
+                  TextField(
+                    controller: descController,
+                    decoration: const InputDecoration(labelText: "Deskripsi"),
+                  ),
+                  TextField(
+                    controller: priceController,
+                    decoration: const InputDecoration(labelText: "Harga"),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: () => pickImage(setDialogState),
+                    icon: const Icon(Icons.image),
+                    label: const Text("Pilih Gambar"),
+                  ),
+                  const SizedBox(height: 10),
+                  buildPreviewImage(product),
+                ],
+              ),
             ),
-            TextField(
-              controller: descriptionController,
-              decoration: const InputDecoration(labelText: "Deskripsi"),
-            ),
-            TextField(
-              controller: priceController,
-              decoration: const InputDecoration(labelText: "Harga"),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              final newProduct = ProductModel(
-                name: nameController.text,
-                description: descriptionController.text,
-                price: int.tryParse(priceController.text) ?? 0,
-              );
-              if (product == null) {
-                addProduct(newProduct);
-              } else {
-                updateProduct(index!, newProduct);
-              }
-              Navigator.pop(context);
-            },
-            child: const Text("Simpan"),
-          ),
-        ],
+            actions: [
+              ElevatedButton(
+                onPressed: () async {
+                  String imageBase64 = product?.image ?? "";
+                  if (selectedImage != null) {
+                    imageBase64 = await convertImageToBase64(selectedImage!);
+                  }
+                  final newProduct = ProductModel(
+                    name: nameController.text,
+                    desc: descController.text,
+                    price: int.tryParse(priceController.text) ?? 0,
+                    image: imageBase64,
+                  );
+                  if (product == null) {
+                    addProduct(newProduct);
+                  } else {
+                    updateProduct(index!, newProduct);
+                  }
+                  Navigator.pop(context);
+                },
+                child: const Text("Simpan"),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -121,16 +194,11 @@ class _ProductPageState extends State<ProductPage> {
       appBar: AppBar(
         title: const Text(
           "Produk",
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.green,
         leading: IconButton(
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.arrow_back, color: Colors.white),
         ),
       ),
@@ -161,17 +229,13 @@ class _ProductPageState extends State<ProductPage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => ProductDetailPage(
-                                  product: product,
-                                ),
+                                builder: (_) =>
+                                    ProductDetailPage(product: product),
                               ),
                             );
                           },
                           child: Card(
                             margin: const EdgeInsets.only(bottom: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(15),
-                            ),
                             child: ListTile(
                               contentPadding: const EdgeInsets.all(15),
                               title: Text(
@@ -183,22 +247,41 @@ class _ProductPageState extends State<ProductPage> {
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const SizedBox(height: 5),
                                   Text("Rp ${product.price}"),
-                                  const SizedBox(height: 5),
-                                  Text(product.description),
+                                  Text(product.desc),
+                                  const SizedBox(height: 10),
+                                  product.image.isNotEmpty
+                                      ? Image.memory(
+                                          base64Decode(product.image),
+                                          width: 120,
+                                          height: 120,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : const Icon(Icons.image, size: 120),
                                 ],
                               ),
-                              leading: IconButton(
-                                icon: const Icon(Icons.edit,
-                                    color: Colors.orange),
-                                onPressed: () =>
-                                    showForm(product: product, index: index),
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete,
-                                    color: Colors.red),
-                                onPressed: () => deleteProduct(index),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      color: Colors.green,
+                                    ),
+                                    onPressed: () => showForm(
+                                      product: product,
+                                      index: index,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () => deleteProduct(index),
+                                  ),
+                                ],
                               ),
                             ),
                           ),

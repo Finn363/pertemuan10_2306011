@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import '../models/product_model.dart';
 
 class ProductCard extends StatelessWidget {
   final ProductModel product;
   final VoidCallback? onDelete;
-  final VoidCallback? onEdit;   // opsional
-  final VoidCallback onTap;     // wajib
+  final VoidCallback? onEdit;
+  final VoidCallback onTap;
 
   const ProductCard({
     super.key,
@@ -18,7 +19,7 @@ class ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap, 
+      onTap: onTap,
       child: Card(
         margin: const EdgeInsets.only(bottom: 12),
         child: ListTile(
@@ -30,7 +31,17 @@ class ProductCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text("Rp ${product.price}"),
-              Text(product.description),
+              Text(product.desc), // ✅ gunakan desc, bukan description
+              const SizedBox(height: 10),
+              product.image.isNotEmpty
+                  ? Image.memory(
+                      base64Decode(product.image),
+                      width: 120,
+                      height: 120,
+
+                      fit: BoxFit.cover,
+                    )
+                  : const Icon(Icons.image, size: 120),
             ],
           ),
           // tombol edit
